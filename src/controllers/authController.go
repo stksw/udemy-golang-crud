@@ -3,8 +3,10 @@ package controllers
 import (
 	"ambassador/src/database"
 	"ambassador/src/models"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func Register(c *fiber.Ctx) error {
@@ -20,13 +22,13 @@ func Register(c *fiber.Ctx) error {
 		})
 	}
 
-	// password, _ := bcrypt.GenerateFromPassword([]byte(data["password"]), 12)
+	password, _ := bcrypt.GenerateFromPassword([]byte(data["password"]), 12)
 
 	user := models.User{
 		FirstName:    data["first_name"],
 		LastName:     data["last_name"],
 		Email:        data["email"],
-		Password:     "password",
+		Password:     password,
 		IsAmbassador: false,
 	}
 
@@ -35,7 +37,7 @@ func Register(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-func login(c *fiber.Ctx) error {
+func Login(c *fiber.Ctx) error {
 	var data map[string]string 
 	if err := c.BodyParser(&data); err != nil {
 		return err
@@ -43,13 +45,22 @@ func login(c *fiber.Ctx) error {
 
 	var user models.User
 	database.DB.Where("email = ?", data["email"]).First(&user)
+
 	if user.Id == 0 {
 		c.Status(fiber.StatusBadRequest)
 		return c.JSON(fiber.Map{
 			"message": "User not found!",
 		})
 	}
-	return c.JSON(fiber.Map{
-		"message": "test",
-	})
+
+	fmt.Println(user.Password, []byte(user.Password), []byte(data["password"]))
+	
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data["password"])); err != nil {
+		c.Status(fiber.StatusBadRequest)
+		return c.JSON(fiber.Map{
+			"message": "Wrong password",
+		})
+	}
+
+	return c.JSON(fiber.Map{ "message": "test" })
 }
