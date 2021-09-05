@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"ambassador/src/database"
+	"ambassador/src/middlewares"
 	"ambassador/src/models"
 	"strconv"
 	"time"
@@ -93,21 +94,9 @@ type ClaimsWithScope struct {
 }
 
 func User(c *fiber.Ctx) error {
-	cookie := c.Cookies("jwt")
-	token, err := jwt.ParseWithClaims(cookie, &ClaimsWithScope{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte("secret"), nil
-	})
-
-	if err != nil || !token.Valid {
-		c.Status(fiber.StatusUnauthorized)
-		return c.JSON(fiber.Map{
-			"message": "unauthorized",
-		})
-	}
-
-	payload := token.Claims.(*ClaimsWithScope)
 	var user models.User
-	database.DB.Where("id = ?", payload.Subject).First(&user)
+	id, _ := middlewares.GetUserId(c)
+	database.DB.Where("id = ?", id).First(&user)
 
 	return c.JSON(user)
 }
@@ -124,5 +113,46 @@ func Logout(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "success",
 	})
+}
 
+func UpdateInfo(c *fiber.Ctx) error {
+	var data map[string]string
+	if err := c.BodyParser(&data); err != nil {
+		return err
+	}
+
+	id, _ := middlewares.GetUserId(c)
+	user := models.User{
+		Id: id,
+		FirstName: data["first_name"],
+		LastName: data["last_name"],
+		Email: data["email"],
+	}
+
+	database.DB.Model(&user).Updates(&user)
+	return c.JSON(user)
+}
+
+func UpdatePassword(c *fiber.Ctx) error {
+	var data map[string]string
+	if err := c.BodyParser(&data); err != nil {
+		return err
+	}
+
+	if data["password"] != data["password_confirm"] {
+		c.Status(400)
+		return c.JSON(fiber.Map{
+			"message": "passwords do not match",
+		})
+	}
+
+	id, _ := middlewares.GetUserId(c)
+	user := models.User{
+		Id: id,
+	}
+
+	user.SetPassword(data["password"])
+
+	database.DB.Model(&user).Updates(&user)
+	return c.JSON(user)
 }
